@@ -2,16 +2,18 @@
     - name: Include prompts
       import_tasks: prompts.yml
 
+    - set_fact:
+        gce_region: "{{ algo_region | regex_replace('-[^-]+$') }}"
+
     - name: Network configured
       gce_net:
         name: "algo-net-{{ algo_server_name }}"
         fwname: "algo-net-{{ algo_server_name }}-fw"
-        allowed: "udp:500,4500,{{ wireguard_port }};tcp:22"
-        state: "present"
+        allowed: "icmp;udp:500,4500,{{ wireguard_port }};tcp:22"
         mode: auto
         src_range: 0.0.0.0/0
         service_account_email: "{{ service_account_email }}"
-        credentials_file: "{{ credentials_file_path  }}"
+        credentials_file: "{{ credentials_file_path }}"
         project_id: "{{ project_id }}"
 
     - block:
@@ -47,8 +49,75 @@
       register: google_vm
 
     - set_fact:
-        cloud_instance_ip: "{{ google_vm.instance_data[0].public_ip }}"
         ansible_ssh_user: ubuntu
+
+    - name: Set up separate ingress forwarding
+      when: algo_separate_egress
+      block:
+        - name: Address for incoming connections configured
+          gce_eip:
+            name: "algo-address-{{ algo_server_name }}"
+            service_account_email: "{{ service_account_email }}"
+            credentials_file: "{{ credentials_file_path }}"
+            project_id: "{{ project_id }}"
+            region: "{{ gce_region }}"
+          register: google_eip
+
+        - name: Forwarding rule for incoming connections (UDP 500)
+          gce_lb:
+            name: "algo-incoming-udp500-{{ algo_server_name }}"
+            region: "{{ gce_region }}"
+            members: ["{{ gce_region }}/{{ algo_server_name }}"]
+            protocol: udp
+            external_ip: "{{ google_eip.name }}"
+            port_range: 500
+            service_account_email: "{{ service_account_email }}"
+            credentials_file: "{{ credentials_file_path }}"
+            project_id: "{{ project_id }}"
+    
+        - name: Forwarding rule for incoming connections (UDP 4500)
+          gce_lb:
+            name: "algo-incoming-udp4500-{{ algo_server_name }}"
+            region: "{{ gce_region }}"
+            members: ["{{ gce_region }}/{{ algo_server_name }}"]
+            protocol: udp
+            external_ip: "{{ google_eip.name }}"
+            port_range: 4500
+            service_account_email: "{{ service_account_email }}"
+            credentials_file: "{{ credentials_file_path }}"
+            project_id: "{{ project_id }}"
+    
+        - name: Forwarding rule for incoming connections (UDP WireGuard)
+          gce_lb:
+            name: "algo-incoming-wireguard-{{ algo_server_name }}"
+            region: "{{ gce_region }}"
+            members: ["{{ gce_region }}/{{ algo_server_name }}"]
+            protocol: udp
+            external_ip: "{{ google_eip.name }}"
+            port_range: "{{ wireguard_port }}"
+            service_account_email: "{{ service_account_email }}"
+            credentials_file: "{{ credentials_file_path }}"
+            project_id: "{{ project_id }}"
+    
+        - name: Forwarding rule for incoming connections (SSH)
+          gce_lb:
+            name: "algo-incoming-ssh-{{ algo_server_name }}"
+            region: "{{ gce_region }}"
+            members: ["{{ gce_region }}/{{ algo_server_name }}"]
+            protocol: tcp
+            external_ip: "{{ google_eip.name }}"
+            port_range: 22
+            service_account_email: "{{ service_account_email }}"
+            credentials_file: "{{ credentials_file_path }}"
+            project_id: "{{ project_id }}"
+
+        - set_fact:
+            cloud_instance_ip: "{{ google_eip.address }}"
+
+    - set_fact:
+        cloud_instance_ip: "{{ google_vm.instance_data[0].public_ip }}"
+      when: not algo_separate_egress
+
   rescue:
     - debug: var=fail_hint
       tags: always

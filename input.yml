@@ -11,6 +11,7 @@
       ssh_tunneling: false
       windows: false
       store_cakey: false
+      separate_egress: false
     providers_map:
       - { name: DigitalOcean, alias: digitalocean }
       - { name: Amazon Lightsail, alias: lightsail }
@@ -135,4 +136,7 @@
         algo_store_cakey: >-
           {% if store_cakey is defined %}{{ store_cakey | bool }}
           {%- elif _store_cakey.user_input is defined and _store_cakey.user_input != "" %}{{ booleans_map[_store_cakey.user_input] | default(defaults['store_cakey']) }}
+          {%- else %}false{% endif %}
+        algo_separate_egress: >-
+          {% if separate_egress is defined %}{{ separate_egress | bool }}
           {%- else %}false{% endif %}
