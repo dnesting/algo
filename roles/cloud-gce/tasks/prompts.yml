@@ -65,3 +65,16 @@
       {% if region is defined %}{{ region }}
       {%- elif _gce_region.user_input is defined and _gce_region.user_input != "" %}{{ gce_regions[_gce_region.user_input | int -1 ] }}
       {%- else %}{{ gce_regions[default_region | int - 1] }}{% endif %}
+
+- pause:
+    prompt: |
+      Do you want a separate egress IP address to make it harder for adversaries to correlate activity with your VPN tunnel?
+      [y/N]
+  register: _separate_egress
+  when: separate_egress is undefined
+
+- set_fact:
+    algo_separate_egress: >-
+      {% if separate_egress is defined %}{{ separate_egress | bool }}
+      {%- elif _separate_egress.user_input is defined and _separate_egress.user_input != "" %}{{ booleans_map[_separate_egress.user_input] | default(false) }}
+      {%- else %}false{% endif %}
