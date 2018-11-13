@@ -54,6 +54,10 @@ COMMIT
 -A INPUT -p ah -j ACCEPT
 # rate limit ICMP traffic per source
 -A INPUT -p icmp --icmp-type echo-request -m hashlimit --hashlimit-upto 5/s --hashlimit-mode srcip --hashlimit-srcmask 32 --hashlimit-name icmp-echo-drop -j ACCEPT
+# allow ICMP unreachables, so that path MTU discovery (PMTUD) works
+-A INPUT -p icmp --icmp-type destination-unreachable -j ACCEPT
+# allow ICMP time-exceeded, so that we can traceroute
+-A INPUT -p icmp --icmp-type time-exceeded -j ACCEPT
 # Accept IPSEC traffic to ports 500 (IPSEC) and 4500 (MOBIKE aka IKE + NAT traversal)
 -A INPUT -p udp -m multiport --dports 500,4500{% if wireguard_enabled %},{{ wireguard_port}}{% endif %} -j ACCEPT
 # Allow new traffic to port 22 (SSH)
